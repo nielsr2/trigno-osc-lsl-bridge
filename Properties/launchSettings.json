@@ -1,0 +1,11 @@
+{
+  "profiles": {
+    "G702-Trigno-Console": {
+      "commandName": "Executable"
+    },
+    "newProfile1": {
+      "commandName": "Project",
+      "workingDirectory": "C:\\Users\\n\\Aalborg Universitet\\MED 702 - Documents\\Implementation\\Trigno\\G702-Trigno-Console"
+    }
+  }
+}
