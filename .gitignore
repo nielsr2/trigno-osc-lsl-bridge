@@ -338,3 +338,17 @@ ASALocalRun/
 
 # BeatPulse healthcheck temp database
 healthchecksdb
+# ---- G702-Trigno-Console project specific ----
+
+# MSBuild output folder (see csproj <OutputPath>builds\</OutputPath>).
+# Release binaries are published via GitHub Releases, not tracked in the repo.
+builds/
+
+# Claude Code workspace (session data, settings, plans). User-local.
+.claude/
+
+# PDF-to-text extract produced by pdftotext during diagnostics.
+.trigno-sdk.txt
+
+# Scratch / helper scripts used during debugging.
+wek-controller/.fake_wek_sender.py
