@@ -38,9 +38,11 @@ msbuild G702-Trigno-Console.sln /p:Configuration=Debug
 
 There are no tests in this repo.
 
-## External dependency — Rug.Osc
+## External dependency — CoreOSC
 
-`Rug.Osc.dll` is committed at `lib/Rug.Osc.dll` and referenced from the csproj via a repo-relative `<HintPath>lib\Rug.Osc.dll</HintPath>` with `<Private>True</Private>` so MSBuild copies it next to the exe. No manual setup needed on fresh clones.
+OSC encoding is handled by **CoreOSC** (NuGet, 1.0.0, `netstandard2.0` — consumable from net48). It's a pure encode/decode library with no networking layer, so the code owns the `UdpClient` itself: `oscUdp.Connect(OSC_HOST, OSC_PORT)` sets the remote target and the OS picks an ephemeral local port. CoreOSC's `OscMessageConverter.Serialize(...)` flattens an `OscMessage` to `DWord`s which we concatenate into a byte array and push through `UdpClient.Send`. We deliberately avoid `CoreOSC.IO.SocketsExtensions.SendMessageAsync` on the hot path because it allocates a `Task` per send (~39k/s under load).
+
+Historical note: the project previously used `Rug.Osc`, whose `new OscSender(IPAddress, int)` constructor binds the given port *locally* rather than targeting it remotely. That silently prevented packets from ever reaching Protokol/TouchOSC on 7001 — the symptom was `Get-NetUDPEndpoint -LocalPort 7001` showing our process bound to `0.0.0.0:7001`. Don't re-introduce Rug.Osc unless you understand that constructor quirk. The old `lib/Rug.Osc.dll` can be deleted (no longer referenced by the csproj).
 
 ## Architecture
 

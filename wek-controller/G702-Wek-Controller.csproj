@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <RootNamespace>G702_Wek_Controller</RootNamespace>
+    <AssemblyName>G702-Wek-Controller</AssemblyName>
+    <StartupObject>G702_Wek_Controller.Program</StartupObject>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <OutputPath>..\builds\</OutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CoreOSC" Version="1.0.0" />
+  </ItemGroup>
+
+</Project>

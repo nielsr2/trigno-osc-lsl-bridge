@@ -11,7 +11,24 @@
       "Bash(echo \"=== exit: $? ===\")",
       "Bash(command -v pdftotext pdftoppm pdfinfo)",
       "Bash(pdftotext -layout \"C:/Users/UR85XM/Documents/GitHub/G702-Trigno-Console/MAN-025-3-5-Trigno-SDK.pdf\" \"C:/Users/UR85XM/Documents/GitHub/G702-Trigno-Console/.trigno-sdk.txt\")",
-      "Bash(taskkill //F //IM G702-Trigno-Console.exe)"
+      "Bash(taskkill //F //IM G702-Trigno-Console.exe)",
+      "Bash(powershell -NoProfile -Command 'Get-NetUDPEndpoint -LocalPort 7001 -ErrorAction SilentlyContinue | ForEach-Object { $p = Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue; [PSCustomObject]@{ LocalAddress=$_.LocalAddress; LocalPort=$_.LocalPort; PID=$_.OwningProcess; Process=$p.ProcessName } } | Format-Table -AutoSize')",
+      "Bash(tasklist //FI \"IMAGENAME eq G702-Trigno-Console.exe\")",
+      "Bash(taskkill //F //PID 27348 //PID 1188 //PID 1206)",
+      "Bash(dotnet add *)",
+      "Bash(powershell -NoProfile -Command ' *)",
+      "Bash(powershell *)",
+      "Bash(dotnet sln *)",
+      "Bash(taskkill //F //IM G702-OSC-Tester.exe)",
+      "Bash(taskkill //F //PID 25256)",
+      "Bash(taskkill //F //IM G702-Wek-Controller.exe)",
+      "Bash(command -v python)",
+      "Bash(command -v python3)",
+      "Bash(ls -la \"C:/Users/UR85XM/Documents/GitHub/G702-Trigno-Console/builds/net48/\"*.exe)",
+      "Bash(dotnet package *)",
+      "Bash(dotnet restore *)",
+      "Bash(taskkill //F //IM G702-Trigno-Console.exe //IM G702-OSC-Tester.exe //IM G702-Wek-Controller.exe //IM G702-Trigno-LSL.exe)",
+      "Bash(python *)"
     ]
   }
 }

@@ -4,7 +4,8 @@ using System.Collections.Generic;
 using System.Text;
 using System.IO;
 using System.Threading;
-using Rug.Osc;
+using CoreOSC;
+using CoreOSC.Types;
 using System.Net;
 
 namespace G702_Trigno_Console
@@ -92,9 +93,11 @@ namespace G702_Trigno_Console
 
         private const string OSC_HOST = "127.0.0.1";
         private const int    OSC_PORT = 7001;
-        // Rug.Osc's OscSender is UDP; Send() is a silent no-op until Connect()
-        // is called, so forgetting that makes Protokol/TouchOSC see nothing.
-        private static OscSender oSender = new OscSender(IPAddress.Parse(OSC_HOST), OSC_PORT);
+        // CoreOSC is encode-only. We own the UdpClient: Connect() sets the
+        // *remote* target (local port auto-ephemeral) — no more colliding
+        // with port 7001 the way Rug.Osc's OscSender(IPAddress, int) did.
+        private static UdpClient oscUdp;
+        private static readonly OscMessageConverter _oscEncoder = new OscMessageConverter();
         private static long _oscSent;
 
         // Use the literal IPv4 loopback, NOT "localhost". On Windows, "localhost"
@@ -162,6 +165,26 @@ namespace G702_Trigno_Console
 
         private static void Main(string[] args)
         {
+            for (int i = 0; i < args.Length; i++)
+            {
+                if (args[i] == "--listen")
+                {
+                    int port = OSC_PORT;
+                    for (int j = 0; j < args.Length - 1; j++)
+                        if (args[j] == "--port" && int.TryParse(args[j + 1], out int p)) port = p;
+                    RunOscListener(port);
+                    return;
+                }
+                if (args[i] == "--help" || args[i] == "-h")
+                {
+                    Console.WriteLine("Usage:");
+                    Console.WriteLine("  G702-Trigno-Console.exe                  Run the Trigno->OSC bridge (default).");
+                    Console.WriteLine("  G702-Trigno-Console.exe --listen         Dump OSC messages received on UDP 7001.");
+                    Console.WriteLine("  G702-Trigno-Console.exe --listen --port N  Listen on a specific port.");
+                    return;
+                }
+            }
+
             var app = new Program();
 
             Console.CancelKeyPress += (s, e) =>
@@ -177,8 +200,10 @@ namespace G702_Trigno_Console
             {
                 try
                 {
-                    oSender.Connect();
-                    Log("INFO", "OSC sender connected (state=" + oSender.State + ").");
+                    oscUdp = new UdpClient();
+                    oscUdp.Connect(OSC_HOST, OSC_PORT);
+                    Log("INFO", "OSC UDP sender local=" + oscUdp.Client.LocalEndPoint
+                              + " -> " + OSC_HOST + ":" + OSC_PORT);
                 }
                 catch (Exception ex) { LogEx("OSC connect", ex); }
 
@@ -261,17 +286,25 @@ namespace G702_Trigno_Console
 
         private static long _oscErrors;
 
-        private static void Osend(OscMessage omess)
+        // Build + send a single-float OSC message. Using CoreOSC for encoding
+        // only (avoids its async Task allocation on the hot path — at ~39k
+        // msgs/sec a Task per send would be all GC pressure).
+        private static void OsendFloat(string address, float value)
         {
-            if (oSender == null) return;
+            if (oscUdp == null) return;
             try
             {
-                oSender.Send(omess);
+                var msg = new OscMessage(new Address(address), new object[] { value });
+                var dwords = _oscEncoder.Serialize(msg);
+                var bytes = new List<byte>(64);
+                foreach (var d in dwords) bytes.AddRange(d.Bytes);
+                byte[] buf = bytes.ToArray();
+                oscUdp.Send(buf, buf.Length);
                 Interlocked.Increment(ref _oscSent);
             }
             catch (Exception ex)
             {
-                // Don't spam — log only the first error and every 1000th after.
+                // Log only the 1st error and every 1000th thereafter.
                 long n = Interlocked.Increment(ref _oscErrors);
                 if (n == 1 || n % 1000 == 0) LogEx("OSC send (#" + n + ")", ex);
             }
@@ -561,6 +594,7 @@ namespace G702_Trigno_Console
             if (imuEmgSocket != null) try { imuEmgSocket.Close(); } catch { }
             if (imuAuxStream != null) try { imuAuxStream.Close(); } catch { }
             if (imuAuxSocket != null) try { imuAuxSocket.Close(); } catch { }
+            if (oscUdp != null)       try { oscUdp.Close();       } catch { }
 
             Log("INFO", "Shutdown complete.");
         }
@@ -638,7 +672,7 @@ namespace G702_Trigno_Console
                             {
                                 float val = reader.ReadSingle();
                                 imuEmgDataList[sn].Add(val);
-                                Osend(new OscMessage("/trigno/" + (sn + 1) + "/emg", val));
+                                OsendFloat("/trigno/" + (sn + 1) + "/emg", val);
                             }
                             Interlocked.Increment(ref imuEmgSamples);
                         }
@@ -689,15 +723,15 @@ namespace G702_Trigno_Console
                                 imuMzDataList[sn].Add(mz);
 
                                 string slot = "/trigno/" + (sn + 1);
-                                Osend(new OscMessage(slot + "/acc/x",  ax));
-                                Osend(new OscMessage(slot + "/acc/y",  ay));
-                                Osend(new OscMessage(slot + "/acc/z",  az));
-                                Osend(new OscMessage(slot + "/gyro/x", gx));
-                                Osend(new OscMessage(slot + "/gyro/y", gy));
-                                Osend(new OscMessage(slot + "/gyro/z", gz));
-                                Osend(new OscMessage(slot + "/mag/x",  mx));
-                                Osend(new OscMessage(slot + "/mag/y",  my));
-                                Osend(new OscMessage(slot + "/mag/z",  mz));
+                                OsendFloat(slot + "/acc/x",  ax);
+                                OsendFloat(slot + "/acc/y",  ay);
+                                OsendFloat(slot + "/acc/z",  az);
+                                OsendFloat(slot + "/gyro/x", gx);
+                                OsendFloat(slot + "/gyro/y", gy);
+                                OsendFloat(slot + "/gyro/z", gz);
+                                OsendFloat(slot + "/mag/x",  mx);
+                                OsendFloat(slot + "/mag/y",  my);
+                                OsendFloat(slot + "/mag/z",  mz);
                             }
                             Interlocked.Increment(ref imuAuxSamples);
                         }
@@ -707,6 +741,123 @@ namespace G702_Trigno_Console
             }
             catch (Exception ex) { if (running) LogEx("ImuAuxWorker", ex); }
             finally { Log("INFO", "ImuAuxWorker stopped."); }
+        }
+
+        // ---- OSC listener (diagnostic mode) ---------------------------------
+
+        // Raw UDP listener that parses OSC packets by hand — no Rug.Osc / SharpOSC
+        // dependency on this side. Lets us verify what's actually on the wire,
+        // independently of whichever OSC library we use for sending.
+        private static void RunOscListener(int port)
+        {
+            Log("INFO", "OSC listener starting on UDP 0.0.0.0:" + port + ". Press Ctrl+C to stop.");
+
+            UdpClient udp;
+            try
+            {
+                udp = new UdpClient(port);
+            }
+            catch (Exception ex)
+            {
+                LogEx("OSC listener bind (" + port + ")", ex);
+                return;
+            }
+
+            bool stop = false;
+            Console.CancelKeyPress += (s, e) =>
+            {
+                e.Cancel = true;
+                stop = true;
+                try { udp.Close(); } catch { }
+            };
+
+            var endpoint = new IPEndPoint(IPAddress.Any, 0);
+            long received = 0;
+            var addressCounts = new Dictionary<string, long>();
+
+            try
+            {
+                while (!stop)
+                {
+                    byte[] data;
+                    try
+                    {
+                        data = udp.Receive(ref endpoint);
+                    }
+                    catch (ObjectDisposedException) { break; }
+                    catch (SocketException) { continue; }
+
+                    received++;
+                    string parsed = ParseOscMessage(data);
+                    string address = parsed.Split(' ')[0];
+
+                    long c;
+                    addressCounts.TryGetValue(address, out c);
+                    addressCounts[address] = c + 1;
+
+                    if (received <= 20 || received % 500 == 0)
+                        Log("RECV", "#" + received + " " + endpoint + " (" + data.Length + "B) " + parsed);
+                }
+            }
+            finally
+            {
+                try { udp.Close(); } catch { }
+                Log("INFO", "Listener stopped. " + received + " packets received total.");
+                Log("INFO", "Per-address tally:");
+                var keys = new List<string>(addressCounts.Keys);
+                keys.Sort();
+                foreach (var k in keys)
+                    Log("INFO", "  " + k + "  x " + addressCounts[k]);
+            }
+        }
+
+        // Minimal OSC message parser. Returns "address typetags arg0 arg1 ...".
+        // Handles the arg types we actually send (f, i) + safely truncates on
+        // anything weirder. OSC uses big-endian binary, padded to 4-byte blocks.
+        private static string ParseOscMessage(byte[] data)
+        {
+            if (data == null || data.Length < 4) return "(empty)";
+
+            int i = 0;
+            int addrStart = 0;
+            while (i < data.Length && data[i] != 0) i++;
+            string address = Encoding.ASCII.GetString(data, addrStart, i - addrStart);
+            i = (i + 4) & ~3;
+
+            if (i >= data.Length) return address;
+
+            int tagStart = i;
+            while (i < data.Length && data[i] != 0) i++;
+            string tags = i > tagStart ? Encoding.ASCII.GetString(data, tagStart, i - tagStart) : "";
+            i = (i + 4) & ~3;
+
+            var sb = new StringBuilder();
+            sb.Append(address).Append(' ').Append(tags);
+
+            for (int t = 1; t < tags.Length; t++)
+            {
+                if (i >= data.Length) break;
+                char tag = tags[t];
+                if (tag == 'f' && i + 4 <= data.Length)
+                {
+                    byte[] buf = { data[i + 3], data[i + 2], data[i + 1], data[i] };
+                    float val = BitConverter.ToSingle(buf, 0);
+                    sb.Append(' ').Append(val.ToString("F4"));
+                    i += 4;
+                }
+                else if (tag == 'i' && i + 4 <= data.Length)
+                {
+                    int v = (data[i] << 24) | (data[i + 1] << 16) | (data[i + 2] << 8) | data[i + 3];
+                    sb.Append(' ').Append(v);
+                    i += 4;
+                }
+                else
+                {
+                    sb.Append(" <").Append(tag).Append('>');
+                    break;
+                }
+            }
+            return sb.ToString();
         }
     }
 }
