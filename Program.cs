@@ -54,23 +54,6 @@ namespace G702_Trigno_Console
         private StreamReader commandReader;
         private StreamWriter commandWriter;
 
-        // Accumulating per-sensor buffers. Unused today but kept for an upcoming
-        // CSV-output pass — do not remove without wiring up replacement storage.
-        private List<float>[] emgDataList    = new List<float>[16];
-        private List<float>[] accXDataList   = new List<float>[16];
-        private List<float>[] accYDataList   = new List<float>[16];
-        private List<float>[] accZDataList   = new List<float>[16];
-        private List<float>[] imuEmgDataList = new List<float>[16];
-        private List<float>[] imuAxDataList  = new List<float>[16];
-        private List<float>[] imuAyDataList  = new List<float>[16];
-        private List<float>[] imuAzDataList  = new List<float>[16];
-        private List<float>[] imuGxDataList  = new List<float>[16];
-        private List<float>[] imuGyDataList  = new List<float>[16];
-        private List<float>[] imuGzDataList  = new List<float>[16];
-        private List<float>[] imuMxDataList  = new List<float>[16];
-        private List<float>[] imuMyDataList  = new List<float>[16];
-        private List<float>[] imuMzDataList  = new List<float>[16];
-
         private bool connected = false;
         private bool running   = false;
 
@@ -299,7 +282,14 @@ namespace G702_Trigno_Console
                 var bytes = new List<byte>(64);
                 foreach (var d in dwords) bytes.AddRange(d.Bytes);
                 byte[] buf = bytes.ToArray();
-                oscUdp.Send(buf, buf.Length);
+                // UdpClient.Send isn't documented as reentrant; two workers
+                // (ImuEmgWorker + ImuAuxWorker) push concurrently, so serialize
+                // the actual syscall. The encode step above stays outside the
+                // lock — it's per-call data.
+                lock (oscUdp)
+                {
+                    oscUdp.Send(buf, buf.Length);
+                }
                 Interlocked.Increment(ref _oscSent);
             }
             catch (Exception ex)
@@ -498,24 +488,6 @@ namespace G702_Trigno_Console
             csvStandardSensors.AppendLine();
             csvIMSensors.AppendLine();
 
-            for (int i = 0; i < 16; i++)
-            {
-                emgDataList[i]    = new List<float>();
-                accXDataList[i]   = new List<float>();
-                accYDataList[i]   = new List<float>();
-                accZDataList[i]   = new List<float>();
-                imuEmgDataList[i] = new List<float>();
-                imuAxDataList[i]  = new List<float>();
-                imuAyDataList[i]  = new List<float>();
-                imuAzDataList[i]  = new List<float>();
-                imuGxDataList[i]  = new List<float>();
-                imuGyDataList[i]  = new List<float>();
-                imuGzDataList[i]  = new List<float>();
-                imuMxDataList[i]  = new List<float>();
-                imuMyDataList[i]  = new List<float>();
-                imuMzDataList[i]  = new List<float>();
-            }
-
             // Open the four data channels. One try wrapping all four so a mid-way
             // failure doesn't leave partial sockets around — quit() will close
             // whatever opened.
@@ -612,8 +584,11 @@ namespace G702_Trigno_Console
                     {
                         try
                         {
-                            for (int sn = 0; sn < 16; ++sn)
-                                emgDataList[sn].Add(reader.ReadSingle());
+                            // Legacy EMG port (50041) — drain the frame to keep
+                            // the TCP buffer from stalling. Not emitted over OSC
+                            // since the modern EMG port (50043) already covers
+                            // all sensor types.
+                            for (int sn = 0; sn < 16; ++sn) reader.ReadSingle();
                             Interlocked.Increment(ref emgSamples);
                         }
                         catch (IOException)
@@ -639,11 +614,14 @@ namespace G702_Trigno_Console
                     {
                         try
                         {
+                            // Legacy AUX port (50042) — drain the 3-per-slot
+                            // aux frame. Not OSC-emitted; modern AUX (50044)
+                            // carries the full 9-per-slot data.
                             for (int sn = 0; sn < 16; ++sn)
                             {
-                                accXDataList[sn].Add(reader.ReadSingle());
-                                accYDataList[sn].Add(reader.ReadSingle());
-                                accZDataList[sn].Add(reader.ReadSingle());
+                                reader.ReadSingle();
+                                reader.ReadSingle();
+                                reader.ReadSingle();
                             }
                             Interlocked.Increment(ref accSamples);
                         }
@@ -671,8 +649,11 @@ namespace G702_Trigno_Console
                             for (int sn = 0; sn < 16; ++sn)
                             {
                                 float val = reader.ReadSingle();
-                                imuEmgDataList[sn].Add(val);
-                                OsendFloat("/trigno/" + (sn + 1) + "/emg", val);
+                                // Skip OSC for unpaired slots — they'd just emit
+                                // zeros. Still read the 4 bytes off the wire to
+                                // stay in frame.
+                                if (_sensors != null && sn < _sensors.Count && _sensors[sn] != SensorTypes.NoSensor)
+                                    OsendFloat("/trigno/" + (sn + 1) + "/emg", val);
                             }
                             Interlocked.Increment(ref imuEmgSamples);
                         }
@@ -702,6 +683,8 @@ namespace G702_Trigno_Console
                         {
                             for (int sn = 0; sn < 16; ++sn)
                             {
+                                // Always read the 9 aux floats off the wire so
+                                // we stay framed — even for empty slots.
                                 float ax = reader.ReadSingle();
                                 float ay = reader.ReadSingle();
                                 float az = reader.ReadSingle();
@@ -712,15 +695,9 @@ namespace G702_Trigno_Console
                                 float my = reader.ReadSingle();
                                 float mz = reader.ReadSingle();
 
-                                imuAxDataList[sn].Add(ax);
-                                imuAyDataList[sn].Add(ay);
-                                imuAzDataList[sn].Add(az);
-                                imuGxDataList[sn].Add(gx);
-                                imuGyDataList[sn].Add(gy);
-                                imuGzDataList[sn].Add(gz);
-                                imuMxDataList[sn].Add(mx);
-                                imuMyDataList[sn].Add(my);
-                                imuMzDataList[sn].Add(mz);
+                                // Skip OSC emission for unpaired slots.
+                                if (_sensors == null || sn >= _sensors.Count || _sensors[sn] == SensorTypes.NoSensor)
+                                    continue;
 
                                 string slot = "/trigno/" + (sn + 1);
                                 OsendFloat(slot + "/acc/x",  ax);
