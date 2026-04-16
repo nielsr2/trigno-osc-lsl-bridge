@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -E \"\\\\.\\(cs|csproj|sln|config\\)$\")",
+      "Read(//c/Users/UR85XM/Desktop/**)",
+      "Bash(timeout 8 ./G702-Trigno-Console.exe)",
+      "Bash(echo \"=== exit code: $? ===\")",
+      "Bash(msbuild G702-Trigno-Console.sln /p:Configuration=Release /v:minimal)",
+      "Bash(dotnet build *)",
+      "Bash(timeout 6 ./G702-Trigno-Console.exe)",
+      "Bash(echo \"=== exit: $? ===\")",
+      "Bash(command -v pdftotext pdftoppm pdfinfo)",
+      "Bash(pdftotext -layout \"C:/Users/UR85XM/Documents/GitHub/G702-Trigno-Console/MAN-025-3-5-Trigno-SDK.pdf\" \"C:/Users/UR85XM/Documents/GitHub/G702-Trigno-Console/.trigno-sdk.txt\")",
+      "Bash(taskkill //F //IM G702-Trigno-Console.exe)"
+    ]
+  }
+}

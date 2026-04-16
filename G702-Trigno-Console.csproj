@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net40</TargetFramework>
+    <TargetFramework>net48</TargetFramework>
     <RootNamespace>G702_Trigno_Console</RootNamespace>
     <StartupObject>G702_Trigno_Console.Program</StartupObject>
   </PropertyGroup>
@@ -13,7 +13,8 @@
 
   <ItemGroup>
     <Reference Include="Rug.Osc">
-      <HintPath>..\..\..\..\..\Desktop\Rug.Osc.dll</HintPath>
+      <HintPath>lib\Rug.Osc.dll</HintPath>
+      <Private>True</Private>
     </Reference>
   </ItemGroup>
 
