@@ -19,9 +19,6 @@
     <Compile Remove="osc-tester\**" />
     <EmbeddedResource Remove="osc-tester\**" />
     <None Remove="osc-tester\**" />
-    <Compile Remove="wek-controller\**" />
-    <EmbeddedResource Remove="wek-controller\**" />
-    <None Remove="wek-controller\**" />
     <Compile Remove="trigno-lsl\**" />
     <EmbeddedResource Remove="trigno-lsl\**" />
     <None Remove="trigno-lsl\**" />

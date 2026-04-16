@@ -350,5 +350,5 @@ builds/
 # PDF-to-text extract produced by pdftotext during diagnostics.
 .trigno-sdk.txt
 
-# Scratch / helper scripts used during debugging.
-wek-controller/.fake_wek_sender.py
+# Vendor PDFs (Trigno SDK manual etc.) - download from upstream, don't commit.
+*.pdf
